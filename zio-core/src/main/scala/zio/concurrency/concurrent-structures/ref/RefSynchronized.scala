@@ -12,7 +12,7 @@ import zio._
 // Check out the official documentation for ZIO Ref.Synchronized here:
     // https://github.com/zio/zio/blob/series/2.x/docs/reference/concurrency/refsynchronized.md                                                                                                                       
 
-object RefSynchronized extends ZIOAppDefault {
+object RefSynchronized /*extends ZIOAppDefault*/ {
 
     // Ref.Synchronized is the effectful version of Ref, with almost all of the same operations, however
     // ops like modifyZIO and updateZIO, among others- can be effectful and run these effects to change the
@@ -80,14 +80,14 @@ object RefSynchronized extends ZIOAppDefault {
     // to just use a regular Ref, do that.
 
     // an example way to get around using Ref.Sychronized, while still using effects...
-    def updateRefAndLog[A](ref: Ref[A])(func: A => A): URIO[Any, Unit] = {
-        ref.modify { old =>
-            val nu = func(old)
-            ((old, nu), nu) // <- we return the old And the new values so we can use them later
-        }.flatMap { case (old, nu) =>  // rather than putting the effect in the modify operation
-            Console.printLine(s"updated ${old} to ${nu}")    
-        }
-    }
+    // def updateRefAndLog[A](ref: Ref[A])(func: A => A): URIO[Any, Unit] = {
+    //     ref.modify { old =>
+    //         val nu = func(old)
+    //         ((old, nu), nu) // <- we return the old And the new values so we can use them later
+    //     }.flatMap { case (old, nu) =>  // rather than putting the effect in the modify operation
+    //         Console.printLine(s"updated ${old} to ${nu}")    
+    //     }
+    // }
 
     // One of the most common uses cases for Ref.Sychronized is to allocate mutable state 
     // within an update/modify operation, similar to a cache.  The example above of the
