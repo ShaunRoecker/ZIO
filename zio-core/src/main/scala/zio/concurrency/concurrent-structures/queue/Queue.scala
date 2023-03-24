@@ -2,6 +2,7 @@ package concurrency.structures.queue
 
 import zio._
 
+
 //  ██████╗ ██╗   ██╗███████╗██╗   ██╗███████╗
 // ██╔═══██╗██║   ██║██╔════╝██║   ██║██╔════╝
 // ██║   ██║██║   ██║█████╗  ██║   ██║█████╗  
@@ -62,8 +63,8 @@ object Queues extends ZIOAppDefault {
         //queue value: Structure((a,1),1.0)
     } yield v1
 
-    // With bounded Queues, they are back-pressured meaning that if the queue is full,
-    // any offers to the Queue will be suspended until a value is taken from the queue.
+    // With bounded Queues, they are back-pressured by default meaning that if the queue is 
+    // full, any offers to the Queue will be suspended until a value is taken from the queue.
 
     val res3: IO[Throwable, Unit] = for {
         queue <- Queue.bounded[String](1)
@@ -89,8 +90,69 @@ object Queues extends ZIOAppDefault {
         items = Range.inclusive(1, 10).toList
         _ <- queue.offerAll(items)
     } yield ()
+
+    val res5: UIO[Unit] = for {
+        queue <- Queue.bounded[String](2)
+        _ <- queue.offer("ping")
+                .tap(_ => Console.printLine("ping"))
+                .forever
+                .fork
+    } yield ()
+
+    // One thing to consider for bounded Queues with back-pressure is that
+    // if the queue is full and the upstream producers are suspended from
+    // pushing values to the queue, the downstream consumers have to go 
+    // through all the old values before they can process new ones.  This
+    // back-pressure strategy doesn't make sense for use cases when new
+    // values being pushed to the queue are more important than the older 
+    // ones that the queue is currently filled with.  
+
+    // Sliding Queue 
+    // With the sliding strategy, when a Queue is full then oldest values
+    // are dropped to make room for new values, so there is no suspension
+    // and newer values are favored over older ones, this makes sense for 
+    // for financial market data.  Another example use case that could 
+    // benefit from sliding Queues is weather data for short-term forecasts
+    // or storm tracking, where the most recent observations might be 
+    // thought to have higher value for making predictions.
+
+    val slidding: UIO[(Int, Int)] = for {
+        queue <- Queue.sliding[Int](2)
+        _ <- ZIO.foreach(List(1, 2, 3))(queue.offer)
+        a <- queue.take
+        b <- queue.take
+
+    } yield ((a, b))  // (2, 3)
+
+    // Dropping Queues
+    // The dropping strategy is similar to the sliding strategy, but
+    // if the queue is full then the value that is trying to be added
+    // is dropped. An example use case would be longer-term weather
+    // recordings, and the distribution of recordings is more important
+    // than having the most recent.
     
-    
+    val dropping: UIO[(Int, Int)] = for {
+        queue <- Queue.dropping[Int](2)
+        _ <- ZIO.foreach(List(1, 2, 3))(queue.offer)
+        a <- queue.take
+        b <- queue.take
+
+    } yield ((a, b))  // (1, 2)
+
+    // here are some additional methods (combinators) for the ZIO Queue
+    // data structure:
+
+    trait Queue[A] {
+        def offerAll(as: Iterable[A]): UIO[Boolean]
+        def poll: UIO[Option[A]]
+        def takeAll: UIO[Chunk[A]]
+        def takeUpTo(max: Int): UIO[Chunk[A]]
+        def takeBetween(min: Int, max: Int): UIO[Chunk[A]]
+    }
+
+
+
+
     def run =
         for {
             _ <- Console.printLine("Queues")
@@ -99,6 +161,10 @@ object Queues extends ZIOAppDefault {
             _ <- res3
             _ <- polled.debug // Some(10)
             _ <- res4
+            _ <- res5
+            _ <- slidding.debug // (2, 3)
+            _ <- dropping.debug // (1, 2)
+            
         } yield ()
   
 }
