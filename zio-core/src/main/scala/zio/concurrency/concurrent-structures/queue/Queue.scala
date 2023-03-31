@@ -14,7 +14,7 @@ import zio._
 // Check out the official documentation for ZIO Queues here:
 // https://github.com/zio/zio/blob/series/2.x/docs/reference/concurrency/queue.md
 
-object Queues extends ZIOAppDefault {
+object Queues {
     
     // Queues in ZIO, like any version of a queue I've ever heard of are a first in - first out 
     // data structure.  They are used as buffers between push and pull interfaces and are used to
@@ -142,17 +142,61 @@ object Queues extends ZIOAppDefault {
     // here are some additional methods (combinators) for the ZIO Queue
     // data structure:
 
-    trait Queue[A] {
+    trait QueueInterface[A] {
+        // Push/Pull Operations
+        def offer(a: A): UIO[Boolean] 
+        def take: UIO[A]
         def offerAll(as: Iterable[A]): UIO[Boolean]
-        def poll: UIO[Option[A]]
+        def poll: UIO[Option[A]] // returns optional value of the next value in the queue
         def takeAll: UIO[Chunk[A]]
         def takeUpTo(max: Int): UIO[Chunk[A]]
         def takeBetween(min: Int, max: Int): UIO[Chunk[A]]
+        // Metrics
+        def capacity: Int // returns the max capacity of the queue
+        def size: UIO[Int] // returns the number of values in the queue
+        // Shutdown Queues
+        def awaitShutDown: UIO[Unit]  // returns an effect that suspends until the queue is shutdown
+        def isShutdown: UIO[Boolean] // returns true if the queue is shutdown
+        def shutdown: UIO[Unit] // shutdown the queue
     }
 
+    // when working with queues, its good practice to shut them down when finished with them
 
+    // Note: for performace, Queues should be implemented with powes of 2
+    val queue32 = for {
+        queue <- Queue.bounded[Int](16) // <- 2^4 => 16 
+        f1 <- queue.offer(10).fork
+        pollVal <- queue.poll
+        _ <- ZIO.debug(pollVal)
+        _ <- f1.join
+    } yield ()
 
+    def producer(queue: Queue[Int]): ZIO[Clock, Nothing, Unit] =
+        ZIO.foreachDiscard(0 to 5){ i =>
+            queue.offer(i) *> ZIO.sleep(100.milliseconds)    
+        }
 
+    def consumer(id: Int)(queue: Queue[Int]): ZIO[Console, Nothing, Nothing] =
+        queue.take.flatMap { i => 
+            Console.printLine{
+                scala.Console.CYAN +
+                    s"Consumer $id got $i\n" +
+                scala.Console.RESET
+            }.!  //-> ".!" is an alias for ".orDie", its why we can have IO
+        }.forever       // and Nothing in the error type.
+
+    def example7: ZIO[Console with Clock, Nothing, Unit] = for {
+        queue <- Queue.bounded[Int](16)
+        producerFiber <- producer(queue).fork
+        consumer1Fiber <- consumer(1)(queue).fork
+        consumer2Fiber <- consumer(2)(queue).fork
+        _ <- producerFiber.join
+        _ <- ZIO.sleep(1.second)
+        _ <- consumer1Fiber.interrupt
+        _ <- consumer2Fiber.interrupt
+    } yield ()
+    
+    
     def run =
         for {
             _ <- Console.printLine("Queues")
@@ -164,8 +208,11 @@ object Queues extends ZIOAppDefault {
             _ <- res5
             _ <- slidding.debug // (2, 3)
             _ <- dropping.debug // (1, 2)
+            _ <- queue32
+            
+            
+            
             
         } yield ()
   
 }
-//

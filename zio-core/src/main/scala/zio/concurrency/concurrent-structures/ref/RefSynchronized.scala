@@ -12,7 +12,7 @@ import zio._
 // Check out the official documentation for ZIO Ref.Synchronized here:
     // https://github.com/zio/zio/blob/series/2.x/docs/reference/concurrency/refsynchronized.md                                                                                                                       
 
-object RefSynchronized /*extends ZIOAppDefault*/ {
+object RefSynchronized {
 
     // Ref.Synchronized is the effectful version of Ref, with almost all of the same operations, however
     // ops like modifyZIO and updateZIO, among others- can be effectful and run these effects to change the
@@ -74,6 +74,7 @@ object RefSynchronized /*extends ZIOAppDefault*/ {
                 }
             v <- ref.get
         } yield (v / users.length)
+
    
     // Ref.Sychronized has additional overhead versus Ref, so it is important to do 
     // the least amount of work possible within a modify operation and if it is possible
@@ -107,7 +108,7 @@ object RefSynchronized /*extends ZIOAppDefault*/ {
         ref1 <- Ref.Synchronized.make(0)
         ref1g <- ref1.get
         _ <- ZIO.debug(s"Initial Ref.Synchronized value: ${ref1g}\n")
-        _ <- updateWithEffect(getNumEffect, ref1)
+        // _ <- updateWithEffect(getNumEffect, ref1)
         ref1Get <- ref1.get
         _ <- ZIO.debug(s"New Ref.Synchronized value: ${ref1Get}\n")    
 
@@ -118,8 +119,11 @@ object RefSynchronized /*extends ZIOAppDefault*/ {
 
         age <- meanAge
         _ <- ZIO.debug(age) // 25
+
+
          
     } yield ()
     
   
 }
+//

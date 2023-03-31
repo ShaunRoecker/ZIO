@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit
 //  Check out the official documentation for ZIO Semaphore here:
     // https://github.com/zio/zio/blob/series/2.x/docs/reference/concurrency/semaphore.md
 
-object SemaphoreDocs extends ZIOAppDefault {
+object Semaphores {
 
     // Have you ever seen one of those little signs outside of an auditorium, restaurant,
     // or bar that says "Max Occupancy 112" ? A Semaphore is like an enforcer of 
@@ -116,7 +116,7 @@ object SemaphoreDocs extends ZIOAppDefault {
     } yield ()
 
 
-    
+
 
     def run = for {
         _ <- programSemaphore
