@@ -120,20 +120,38 @@ object Hubs extends ZIOAppDefault {
     // The bounded constructor is the most common way to create a hub, also note that for 
     // maxiumum efficiency, its important to use powers of two for the Hub capacity.
 
-    // def bounded[A](requestedCapacity: Int): UIO[Hub[A]] =
-    //     Math.pow(requestedCapacity, 2)               //TODO: create a method that creates a new Hub
-                                                        // with the next power of two value larger 
-                                                        // than requestedCapacity
+    // This method creates a hub with a set capacity of the next power of two from the
+    // value entered as requestedCapacity, so if you want a Hub with capacity of 100,
+    // this method will create a hub with capacity of 128, if you want a Hub with capacity of
+    // 129, it will set it to 256
+    def boundedHubOptimized[A](requestedCapacity: Int): UIO[Hub[A]] = {
+      import scala.math._
+      val optimizedCapacity: Int = 
+        pow(2, ((log(requestedCapacity.toDouble) / log(2d)).floor + 1d)).toInt
+      Hub.bounded[A](optimizedCapacity)
+    } 
 
-    
 
-
+    val hub2: ZIO[Any, Nothing, Unit] = 
+        boundedHubOptimized[String](100).flatMap { hub => 
+            ZIO.scoped {
+                for {
+                    _ <- hub.subscribe.flatMap { sub =>
+                            for {
+                                _ <- hub.publish("hub optimized for capacity")
+                                _ <- sub.take.flatMap(Console.printLine(_)).!
+                            } yield ()
+                    }
+                    _ <- ZIO.debug(hub.capacity) // capacity: 128
+                } yield ()
+            }
+        }
 
 
     def run = for {
         _ <- Console.printLine("Hubs")
         _ <- hub1
         _ <- naiveHub // 1
-
+        _ <- hub2
     } yield ()
 }
