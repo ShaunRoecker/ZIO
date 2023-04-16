@@ -1,6 +1,9 @@
 package concurrency.structures.promise
 
 import zio._
+import java.io.File
+import java.io.IOException
+import scala.util.Random
 
 
 // ██████╗ ██████╗  ██████╗ ███╗   ███╗██╗███████╗███████╗
@@ -23,10 +26,22 @@ object Promise_  extends ZIOAppDefault{
     /*
     *   trait Promise[E, A] {
     *      def await: IO[E, A]
+    * 
     *      def fail(e: E): UIO[Boolean] 
+    * 
     *      def succeed(a: A): UIO[Boolean]
+    * 
     *      def complete(io: IO[E, A]): UIO[Boolean]
+    *           - complete completes a Promise with the result of an effect
+    * 
     *      def completeWith(io: IO[E, A]): UIO[Boolean]
+    *           - completeWith completes a promise with the effect itself.
+    * 
+    *      def isDone: UIO[Boolean]
+    * 
+    *      def poll: UIO[Option[IO[E, A]]]
+    * 
+    *      def interrupt: UIO[Boolean]
     *   }
     */
         
@@ -85,6 +100,24 @@ object Promise_  extends ZIOAppDefault{
 
     } yield value
 
+
+    // The "result" of a Promise is the value that is returned when the 
+    // Promise.await method is called, the "return" value of a Promise
+    // is the value that is returned when the Promise 
+    // succeeds/fails/completes/etc, which is a Boolean value
+
+    val randomInt: UIO[Int] =
+        ZIO.succeed(Random.nextInt())
+
+    val returnedVSResult: UIO[Unit] = for {
+        p <- Promise.make[Nothing, Int]
+        returned <- p.complete(randomInt)  // return: true
+        _ <- ZIO.debug(returned)
+        result <- p.await  // result: 9763525
+        _ <- ZIO.debug(result)
+    } yield ()
+
+
     // This example shows how we can use promises to suspend the 'right' fiber
     // from printing to the console until the 'left' fiber completes the Promise,
     // and then use the value the Promise was completed with to continue the 
@@ -107,13 +140,13 @@ object Promise_  extends ZIOAppDefault{
         Promise.make[Exception, String]
 
     val ioBooleanSucceeded: UIO[Boolean] = 
-        ioPromise1.flatMap(promise => promise.succeed("I'm done"))
+        ioPromise1.flatMap(promise => promise.succeed("I'm done"))  // def succeed(a: A): UIO[Boolean]
 
     val ioPromise2: UIO[Promise[Exception, Nothing]] = 
         Promise.make[Exception, Nothing]
 
     val ioBooleanFailed: UIO[Boolean] = 
-        ioPromise2.flatMap(promise => promise.fail(new Exception("boom")))
+        ioPromise2.flatMap(promise => promise.fail(new Exception("boom"))) //def fail(e: E): UIO[Boolean]
 
     // The boolean tells us whether the Promise was successfully set or not,
     // not the value the Promise is set to.
@@ -133,12 +166,51 @@ object Promise_  extends ZIOAppDefault{
 
 
 
+    // //////////////////////////////////////////////////////////////////////////
+    // Example of using Promise to wait for a file to be completed to perform
+    // some action on the file on another file
+
+    def getFile(path: String): UIO[File] =
+        ZIO.succeed {
+            val file = new File(path)
+            file
+        }
+
+    def awaitFile = for {
+        promise <- Promise.make[Nothing, File]
+        // we can force the order of execution of fibers by using Promise
+        getter <- (getFile("test.txt").flatMap(file => promise.succeed(file))).fork
+        user <- (promise.await.flatMap(prom => {
+                    Console.printLine("Found File?") *> 
+                    Console.printLine(s"PATH: ${prom.getAbsolutePath}") 
+                })).fork
+        _ <- getter.join *> user.join
+        _ <- ZIO.debug(promise)
+    } yield ()
+    // //////////////////////////////////////////////////////////////////////////
+    
+    val example: ZIO[Any, IOException, Unit] = 
+        for {
+            promise         <-  Promise.make[Nothing, String]
+            sendHelloWorld  =   (ZIO.succeed("hello world") <* ZIO.sleep(1.second)).flatMap(promise.succeed(_))
+            getAndPrint     =   promise.await.flatMap(Console.printLine(_))
+            fiberA          <-  sendHelloWorld.fork
+            fiberB          <-  getAndPrint.fork
+            _               <-  (fiberA zip fiberB).join
+        } yield ()
+
+
+
+
     def run = for {
         _ <- Console.printLine("Promises")
         _ <- awaitPromise // Hello, World
         _ <- ioBooleanSucceeded.debug // true
         _ <- ioBooleanFailed.debug // true
-        _ <- ioIsItDone2.debug
+        _ <- awaitFile
+        _ <- returnedVSResult
+        _ <- example
+        _ <- ZIO.foreachParDiscard((1 to 4))(Console.printLine(_) *> example)
     } yield ()
 
 }
